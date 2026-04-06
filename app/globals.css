@@ -24,6 +24,8 @@
 
 html {
   scroll-behavior: smooth;
+  scroll-snap-type: y proximity;
+  scroll-padding-top: 30vh;
 }
 
 body {
@@ -124,4 +126,48 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Snap anchor for page sections */
+  .snap-section {
+    scroll-snap-align: start;
+    scroll-snap-stop: normal;
+  }
+}
+
+/* ── Animated section background orbs ─────────────────────────────────────── */
+@keyframes orb-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(6%, 4%) scale(1.08); }
+  66%       { transform: translate(-4%, 7%) scale(0.95); }
+}
+@keyframes orb-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40%       { transform: translate(-7%, -5%) scale(1.1); }
+  70%       { transform: translate(5%, -3%) scale(0.92); }
+}
+@keyframes orb-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%       { transform: translate(4%, -6%) scale(1.06); }
+}
+
+.section-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.section-bg .orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  will-change: transform;
+}
+.section-bg .orb-1 {
+  animation: orb-drift-1 18s ease-in-out infinite;
+}
+.section-bg .orb-2 {
+  animation: orb-drift-2 24s ease-in-out infinite;
+}
+.section-bg .orb-3 {
+  animation: orb-drift-3 30s ease-in-out infinite;
 }

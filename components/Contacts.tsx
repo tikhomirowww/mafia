@@ -4,14 +4,15 @@ import { motion } from "framer-motion";
 import { MapPin, Clock, MessageCircle } from "lucide-react";
 import { useLang } from "@/context/LangContext";
 import { CONTACTS, LOCATIONS } from "@/lib/site-config";
+import SectionBg from "@/components/ui/section-bg";
 
 export default function Contacts() {
   const { t, lang } = useLang();
   const c = t.contacts;
 
   return (
-    <section id="contacts" className="py-24 bg-[#0a0a0a] relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_50%,rgba(201,168,76,0.05),transparent)] pointer-events-none" />
+    <section id="contacts" className="py-24 bg-bg-primary relative overflow-hidden snap-section">
+      <SectionBg variant="gold" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 30 }}

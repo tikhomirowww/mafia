@@ -4,13 +4,15 @@ import { motion } from "framer-motion";
 import { Users, Check } from "lucide-react";
 import { useLang } from "@/context/LangContext";
 import { CONTACTS } from "@/lib/site-config";
+import SectionBg from "@/components/ui/section-bg";
 
 export default function LonePlayer() {
   const { t } = useLang();
   const l = t.lonePlayer;
 
   return (
-    <section className="py-16 bg-bg-primary">
+    <section className="py-16 bg-bg-primary relative overflow-hidden">
+      <SectionBg variant="subtle" />
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 30 }}

@@ -4,14 +4,15 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { useLang } from "@/context/LangContext";
+import SectionBg from "@/components/ui/section-bg";
 
 export default function FAQ() {
   const { t } = useLang();
   const [openIdx, setOpenIdx] = useState<number | null>(null);
 
   return (
-    <section id="faq" className="py-24 bg-bg-primary relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_50%_50%,rgba(139,0,0,0.06),transparent)] pointer-events-none" />
+    <section id="faq" className="py-24 bg-bg-primary relative overflow-hidden snap-section">
+      <SectionBg variant="red" />
       <div className="max-w-3xl mx-auto px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 30 }}

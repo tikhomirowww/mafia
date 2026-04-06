@@ -5,7 +5,6 @@ import Hero from "@/components/Hero";
 import About from "@/components/About";
 import Services from "@/components/Services";
 import Pricing from "@/components/Pricing";
-import HowItWorks from "@/components/HowItWorks";
 import LonePlayer from "@/components/LonePlayer";
 import Booking from "@/components/Booking";
 import Testimonials from "@/components/Testimonials";
@@ -24,7 +23,6 @@ export default function Home() {
         <About />
         <Services />
         <Pricing />
-        <HowItWorks />
         <LonePlayer />
         <Booking />
         <Testimonials />

@@ -3,13 +3,14 @@
 import { motion } from "framer-motion";
 import { Star } from "lucide-react";
 import { useLang } from "@/context/LangContext";
+import SectionBg from "@/components/ui/section-bg";
 
 export default function Testimonials() {
   const { t } = useLang();
 
   return (
-    <section id="reviews" className="py-24 bg-[#0a0a0a] relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_0%,rgba(201,168,76,0.05),transparent)] pointer-events-none" />
+    <section id="reviews" className="py-24 bg-bg-primary relative overflow-hidden snap-section">
+      <SectionBg variant="subtle" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 30 }}

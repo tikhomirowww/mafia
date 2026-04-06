@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Check, Theater, Baby, Building2, Gift, ArrowRight } from "lucide-react";
 import { useLang } from "@/context/LangContext";
 import { useBooking, type FormatId } from "@/context/BookingContext";
+import SectionBg from "@/components/ui/section-bg";
 
 const SERVICE_ICONS = [Theater, Baby, Building2, Gift];
 const FORMAT_IDS: FormatId[] = ["adult", "kids", "corporate", "certificate"];
@@ -20,9 +21,8 @@ export default function Services() {
   const btnLabel = lang === "ru" ? "Забронировать" : "Брондоо";
 
   return (
-    <section id="services" className="py-24 relative bg-bg-primary">
-      {/* Subtle cross-fade gradient between sections */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_50%,rgba(201,168,76,0.04),transparent)] pointer-events-none" />
+    <section id="services" className="py-24 relative bg-bg-primary snap-section">
+      <SectionBg variant="gold" />
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6">
         <motion.div

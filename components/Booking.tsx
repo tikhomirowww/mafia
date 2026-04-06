@@ -9,9 +9,12 @@ import { CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { useLang } from "@/context/LangContext";
 import { useBooking } from "@/context/BookingContext";
 import { LOCATIONS, CONTACTS } from "@/lib/site-config";
+import SectionBg from "@/components/ui/section-bg";
 import CustomSelect from "@/components/ui/custom-select";
 import CustomDatePicker from "@/components/ui/custom-datepicker";
 import DrumTimePicker from "@/components/ui/drum-time-picker";
+import PhoneInput from "@/components/ui/phone-input";
+import PaymentStep from "@/components/ui/payment-step";
 
 const schema = z.object({
   format: z.string().min(1),
@@ -19,7 +22,7 @@ const schema = z.object({
   date: z.string().min(1),
   time: z.string().min(1),
   name: z.string().min(2),
-  phone: z.string().min(9),
+  phone: z.string().min(12), // "+996" + min 8 digits
   players: z.number().min(8).max(14),
   comment: z.string().optional(),
 });
@@ -69,6 +72,7 @@ export default function Booking() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [serverError, setServerError] = useState("");
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
   const {
     register,
@@ -85,6 +89,8 @@ export default function Booking() {
   const selectedDate = watch("date");
   const selectedLocation = watch("location");
   const selectedTime = watch("time");
+  const selectedPlayers = watch("players");
+  const selectedFormatField = watch("format");
 
   // Pre-select format from BookingContext (set by Services cards)
   useEffect(() => {
@@ -116,11 +122,21 @@ export default function Booking() {
       return;
     }
 
+    // Convert receipt to base64
+    let receiptBase64: string | undefined;
+    if (receiptFile) {
+      receiptBase64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.readAsDataURL(receiptFile);
+      });
+    }
+
     try {
       const res = await fetch("/api/booking", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, receipt: receiptBase64 }),
       });
       if (!res.ok) throw new Error();
       setSubmitted(true);
@@ -164,9 +180,8 @@ export default function Booking() {
   const formatOptions = FORMAT_OPTIONS[lang];
 
   return (
-    <section id="booking" className="py-24 relative bg-bg-primary">
-      {/* Subtle radial glow */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(139,0,0,0.08),transparent)] pointer-events-none" />
+    <section id="booking" className="py-24 relative bg-bg-primary overflow-hidden snap-section">
+      <SectionBg variant="red" />
 
       <div className="relative max-w-5xl mx-auto px-4 sm:px-6">
         <motion.div
@@ -336,13 +351,10 @@ export default function Booking() {
                       <label className="block text-xs text-text-muted uppercase tracking-wider mb-2 font-medium">
                         {b.form.phone} <span className="text-red-neon">*</span>
                       </label>
-                      <input
-                        type="tel"
-                        {...register("phone")}
-                        placeholder={b.form.phonePlaceholder}
-                        inputMode="tel"
-                        autoComplete="tel"
-                        className="w-full bg-bg-elevated border border-white/10 hover:border-white/20 focus:border-red-neon text-white placeholder:text-text-dim rounded-lg px-4 py-3 text-sm transition-colors duration-200 outline-none"
+                      <PhoneInput
+                        value={watch("phone") ?? ""}
+                        onChange={(v) => setValue("phone", v, { shouldValidate: true })}
+                        hasError={!!errors.phone}
                       />
                       {errors.phone && (
                         <p className="text-red-neon text-xs mt-1">{b.errors.phoneInvalid}</p>
@@ -352,40 +364,59 @@ export default function Booking() {
 
                   {/* Players */}
                   <div>
-                    <label className="block text-xs text-text-muted uppercase tracking-wider mb-2 font-medium">
+                    <label className="block text-xs text-text-muted uppercase tracking-wider font-medium mb-2">
                       {b.form.players} <span className="text-red-neon">*</span>
                     </label>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const v = watch("players");
-                          if (v > 8) setValue("players", v - 1);
-                        }}
-                        className="w-10 h-10 rounded-lg border border-white/10 text-white hover:border-red-neon/50 flex items-center justify-center text-xl transition-colors duration-200"
-                        aria-label="Уменьшить"
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        {...register("players", { valueAsNumber: true })}
-                        min={8}
-                        max={14}
-                        className="w-20 bg-bg-elevated border border-white/10 focus:border-red-neon text-white text-center rounded-lg px-3 py-2.5 text-sm outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const v = watch("players");
-                          if (v < 14) setValue("players", v + 1);
-                        }}
-                        className="w-10 h-10 rounded-lg border border-white/10 text-white hover:border-red-neon/50 flex items-center justify-center text-xl transition-colors duration-200"
-                        aria-label="Увеличить"
-                      >
-                        +
-                      </button>
-                      <span className="text-text-muted text-xs">(8–14)</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      {/* Stepper row */}
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const v = watch("players");
+                            if (v > 8) setValue("players", v - 1);
+                          }}
+                          className="w-10 h-10 rounded-lg border border-white/10 text-white hover:border-red-neon/50 flex items-center justify-center text-xl transition-colors duration-200 shrink-0"
+                          aria-label="Уменьшить"
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          {...register("players", { valueAsNumber: true })}
+                          min={8}
+                          max={14}
+                          className="w-16 bg-bg-elevated border border-white/10 focus:border-red-neon text-white text-center rounded-lg px-3 py-2.5 text-sm outline-none shrink-0"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const v = watch("players");
+                            if (v < 14) setValue("players", v + 1);
+                          }}
+                          className="w-10 h-10 rounded-lg border border-white/10 text-white hover:border-red-neon/50 flex items-center justify-center text-xl transition-colors duration-200 shrink-0"
+                          aria-label="Увеличить"
+                        >
+                          +
+                        </button>
+                        <span className="text-text-muted text-xs shrink-0">(8–14)</span>
+                      </div>
+                      {/* Cost — full width on mobile, fills remaining on desktop */}
+                      {selectedFormatField === "adult" ? (
+                        <div className="flex-1 flex items-center justify-between bg-bg-primary border border-white/6 rounded-lg px-4 py-2.5">
+                          <span className="text-text-muted text-xs tabular-nums">{selectedPlayers} × 400 сом</span>
+                          <span className="text-gold font-bold text-base tabular-nums font-cinzel">
+                            {(selectedPlayers * 400).toLocaleString("ru-RU")}
+                            <span className="text-gold/60 text-xs font-normal ml-1">сом/час</span>
+                          </span>
+                        </div>
+                      ) : selectedFormatField ? (
+                        <div className="flex-1 flex items-center justify-center bg-bg-primary border border-white/6 rounded-lg px-4 py-2.5">
+                          <span className="text-xs text-text-dim">
+                            {lang === "ru" ? "Цена по договорённости" : "Баа макулдашуу боюнча"}
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                     {errors.players && (
                       <p className="text-red-neon text-xs mt-1">
@@ -415,6 +446,14 @@ export default function Booking() {
                       <AlertCircle size={16} aria-hidden="true" />
                       {serverError}
                     </div>
+                  )}
+
+                  {/* Payment */}
+                  {selectedFormatField === "adult" && (
+                    <PaymentStep
+                      amount={selectedPlayers * 400}
+                      onFileChange={setReceiptFile}
+                    />
                   )}
 
                   {/* Submit */}

@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { Shield, Armchair, Users, Clock, MapPin, Baby } from "lucide-react";
 import { useLang } from "@/context/LangContext";
+import SectionBg from "@/components/ui/section-bg";
 
 const ICONS = [Shield, Armchair, Users, Clock, MapPin, Baby];
 
@@ -10,9 +11,8 @@ export default function About() {
   const { t } = useLang();
 
   return (
-    <section id="about" className="py-24 bg-[#0a0a0a] relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_40%_at_20%_50%,rgba(139,0,0,0.06),transparent)] pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_30%_at_80%_80%,rgba(201,168,76,0.04),transparent)] pointer-events-none" />
+    <section id="about" className="py-24 bg-bg-primary relative overflow-hidden snap-section">
+      <SectionBg variant="redgold" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         {/* Header */}
         <motion.div
