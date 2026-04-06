@@ -1,61 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useMemo } from "react";
-import {
-  motion,
-  useMotionValue,
-  animate,
-  useTransform,
-  type MotionValue,
-} from "framer-motion";
+import { useRef, useEffect, useCallback, useMemo } from "react";
 
-const ITEM_H = 56;
-const VISIBLE = 5;
-const CONTAINER_H = ITEM_H * VISIBLE;
-const COPIES = 5;
-const MID = Math.floor(COPIES / 2); // 2 — center copy
+const ITEM_H  = 52;   // px per item
+const COPIES  = 5;
+const MID     = 2;    // center copy index (0-based)
+const VISIBLE = 5;    // visible rows
 
-const indexToY = (i: number) => (2 - i) * ITEM_H;
-const yToRaw  = (y: number) => 2 - y / ITEM_H;
-
-// ── Per-item — hooks allowed here ─────────────────────────────────────────────
-function DrumItem({
-  label,
-  index,
-  y,
-  isSelected,
-  isBooked,
-}: {
-  label: string;
-  index: number;
-  y: MotionValue<number>;
-  isSelected: boolean;
-  isBooked: boolean;
-}) {
-  const dist    = useTransform(y, (ly) => index - yToRaw(ly));
-  const rotateX = useTransform(dist, [-2.5, 0, 2.5], [38, 0, -38]);
-  const scale   = useTransform(dist, [-1.2, 0, 1.2], [0.78, 1.12, 0.78]);
-  const opacity = useTransform(dist, [-2.2, -1, 0, 1, 2.2], [0.08, 0.38, 1, 0.38, 0.08]);
-
-  return (
-    <motion.div
-      style={{ height: ITEM_H, rotateX, scale, opacity }}
-      className="flex items-center justify-center gap-2"
-    >
-      {isBooked && <span className="w-1.5 h-1.5 rounded-full bg-red-neon shrink-0" />}
-      <span className={[
-        "font-cinzel tracking-widest leading-none",
-        isSelected ? "text-white font-bold text-[1.15rem]"
-          : isBooked ? "text-white/30 text-sm"
-          : "text-white/65 text-sm",
-      ].join(" ")}>
-        {label}
-      </span>
-    </motion.div>
-  );
-}
-
-// ── Main ──────────────────────────────────────────────────────────────────────
 interface Props {
   slots: string[];
   value: string;
@@ -64,124 +15,204 @@ interface Props {
 }
 
 export default function DrumTimePicker({ slots, value, onChange, getStatus }: Props) {
-  const N = slots.length;
+  const N        = slots.length;
+  const extSlots = useMemo(() => Array.from({ length: COPIES }, () => slots).flat(), [slots]);
 
-  // Extended list: COPIES repetitions for infinite feel
-  const extSlots = useMemo(
-    () => Array.from({ length: COPIES }, () => slots).flat(),
-    [slots]
-  );
+  const containerRef = useRef<HTMLDivElement>(null);
+  const itemsRef     = useRef<(HTMLDivElement | null)[]>([]);
+  const isTeleporting = useRef(false);
+  const scrollTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafId         = useRef<number | null>(null);
 
-  // Convert global ext-index → natural slot index
-  const toNatural = (extIdx: number) => ((extIdx % N) + N) % N;
-  // Convert natural → center-copy ext-index
-  const toCenterExt = (natural: number) => MID * N + natural;
+  // Jump to ext-index with no scroll animation
+  const jumpTo = useCallback((extIdx: number) => {
+    if (!containerRef.current) return;
+    isTeleporting.current = true;
+    containerRef.current.scrollTop = extIdx * ITEM_H;
+    requestAnimationFrame(() => { isTeleporting.current = false; });
+  }, []);
 
-  const initExt = toCenterExt(Math.max(0, slots.indexOf(value)));
-  const y = useMotionValue(indexToY(initExt));
-
-  const dragging = useRef(false);
-  const wheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Sync when value changes externally (e.g. format pre-selection resets time)
-  useEffect(() => {
-    const natural = slots.indexOf(value);
-    if (natural >= 0) {
-      animate(y, indexToY(toCenterExt(natural)), { type: "spring", stiffness: 280, damping: 30 });
+  // Nearest available slot (circular)
+  const nearestAvailable = useCallback((natural: number) => {
+    if (getStatus(slots[natural]) === "available") return natural;
+    for (let r = 1; r < N; r++) {
+      const l = ((natural - r) % N + N) % N;
+      const ri = (natural + r) % N;
+      if (getStatus(slots[l])  === "available") return l;
+      if (getStatus(slots[ri]) === "available") return ri;
     }
-  }, [value, slots]); // eslint-disable-line react-hooks/exhaustive-deps
+    return natural;
+  }, [N, slots, getStatus]);
 
-  // Find nearest available starting from extIdx
-  const nearestAvailable = useCallback(
-    (extIdx: number): number => {
-      const c = Math.max(0, Math.min(extSlots.length - 1, Math.round(extIdx)));
-      for (let r = 0; r < extSlots.length; r++) {
-        for (const i of [c - r, c + r]) {
-          if (i >= 0 && i < extSlots.length && getStatus(extSlots[i]) === "available") return i;
-        }
+  // Apply 3D drum transforms directly to DOM (no React re-render needed)
+  const applyTransforms = useCallback(() => {
+    if (!containerRef.current) return;
+    const scrollTop = containerRef.current.scrollTop;
+    // Center of viewport in content coordinates:
+    //   content starts with 2*ITEM_H padding, viewport center = ITEM_H * 2.5
+    const centerContent = scrollTop + ITEM_H * 2.5;
+
+    itemsRef.current.forEach((el, i) => {
+      if (!el) return;
+      // Item i center in content: 2*ITEM_H (padding) + i*ITEM_H + ITEM_H/2
+      const itemCenter = ITEM_H * 2 + i * ITEM_H + ITEM_H / 2;
+      const dist    = (itemCenter - centerContent) / ITEM_H; // in item units
+      const absDist = Math.abs(dist);
+
+      if (absDist > VISIBLE) {
+        el.style.opacity   = "0";
+        el.style.transform = "";
+        return;
       }
-      return c;
-    },
-    [extSlots, getStatus]
-  );
 
-  const snap = useCallback(
-    (currentY: number) => {
-      const rawIdx = yToRaw(currentY);
-      // Which copy is the user near?
-      const copyIdx = Math.max(0, Math.min(COPIES - 1, Math.round(rawIdx / N)));
-      const roundedInCopy = copyIdx * N + ((Math.round(rawIdx) % N + N) % N);
-      const targetExt = nearestAvailable(roundedInCopy);
-      const naturalIdx = toNatural(targetExt);
+      const rotateX = dist * 24;                                // degrees — cylinder tilt
+      const scale   = Math.max(0.70, 1.12 - absDist * 0.15);   // larger at center
+      const opacity = Math.max(0.06, 1 - absDist * 0.30);
 
-      // 1. Animate to the visually nearest position (smooth)
-      animate(y, indexToY(targetExt), { type: "spring", stiffness: 300, damping: 34 })
-        .then(() => {
-          // 2. After animation: teleport to center-copy equivalent (invisible — same y)
-          const centerTarget = toCenterExt(naturalIdx);
-          if (targetExt !== centerTarget) {
-            y.set(indexToY(centerTarget));
-          }
-        });
+      el.style.transform = `perspective(380px) rotateX(${rotateX}deg) scale(${scale})`;
+      el.style.opacity   = String(opacity);
+      // Transition only when not actively scrolling (snap phase)
+      el.style.transition = "transform 0.12s ease, opacity 0.12s ease";
+    });
+  }, []);
 
-      onChange(slots[naturalIdx]);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [nearestAvailable, slots, onChange, y, N]
-  );
+  // Scroll handler: RAF for transforms + debounced snap
+  const handleScroll = useCallback(() => {
+    if (isTeleporting.current) return;
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      const dragTop    = indexToY(extSlots.length - 1);
-      const dragBottom = indexToY(0);
-      const next = Math.max(dragTop, Math.min(dragBottom, y.get() - e.deltaY * 0.55));
-      animate(y, next, { duration: 0.04 });
-      if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
-      wheelTimerRef.current = setTimeout(() => {
-        if (!dragging.current) snap(y.get());
-      }, 200);
-    },
-    [extSlots.length, y, snap]
-  );
+    if (rafId.current) cancelAnimationFrame(rafId.current);
+    rafId.current = requestAnimationFrame(applyTransforms);
+
+    if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    scrollTimer.current = setTimeout(() => {
+      if (!containerRef.current || isTeleporting.current) return;
+      const raw     = Math.round(containerRef.current.scrollTop / ITEM_H);
+      const natural = ((raw % N) + N) % N;
+      const target  = nearestAvailable(natural);
+      jumpTo(MID * N + target);
+      onChange(slots[target]);
+    }, 130);
+  }, [N, slots, nearestAvailable, onChange, jumpTo, applyTransforms]);
+
+  // Mouse drag (skip touch — handled by native scroll)
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    let startY = 0;
+    let startTop = 0;
+    let dragging = false;
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      dragging = true;
+      startY   = e.clientY;
+      startTop = el.scrollTop;
+      el.setPointerCapture(e.pointerId);
+      el.style.cursor = "grabbing";
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!dragging || e.pointerType === "touch") return;
+      el.scrollTop = startTop - (e.clientY - startY);
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!dragging || e.pointerType === "touch") return;
+      dragging = false;
+      el.releasePointerCapture(e.pointerId);
+      el.style.cursor = "grab";
+    };
+
+    el.addEventListener("pointerdown", onDown);
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup",   onUp);
+    el.addEventListener("pointercancel", onUp);
+    return () => {
+      el.removeEventListener("pointerdown", onDown);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup",   onUp);
+      el.removeEventListener("pointercancel", onUp);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // On mount: position to center copy
+  useEffect(() => {
+    const natural = Math.max(0, slots.indexOf(value));
+    jumpTo(MID * N + natural);
+    requestAnimationFrame(applyTransforms);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // When slot list changes (date changed): reset to first slot
+  useEffect(() => {
+    jumpTo(MID * N);
+    requestAnimationFrame(applyTransforms);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slots]);
 
   return (
-    <div
-      className="relative overflow-hidden rounded-xl bg-bg-elevated border border-white/10 select-none touch-none"
-      style={{ height: CONTAINER_H, perspective: "500px" }}
-      onWheel={handleWheel}
-    >
+    <div className="relative rounded-xl overflow-hidden bg-bg-elevated border border-white/10">
       {/* Gradient fades */}
-      <div className="absolute inset-x-0 top-0 z-20 pointer-events-none"
-        style={{ height: ITEM_H * 2, background: "linear-gradient(to bottom,#141414 0%,transparent 100%)" }} />
-      <div className="absolute inset-x-0 bottom-0 z-20 pointer-events-none"
-        style={{ height: ITEM_H * 2, background: "linear-gradient(to top,#141414 0%,transparent 100%)" }} />
+      <div
+        className="absolute inset-x-0 top-0 z-10 pointer-events-none"
+        style={{ height: ITEM_H * 2, background: "linear-gradient(to bottom,#141414 0%,transparent 100%)" }}
+      />
+      <div
+        className="absolute inset-x-0 bottom-0 z-10 pointer-events-none"
+        style={{ height: ITEM_H * 2, background: "linear-gradient(to top,#141414 0%,transparent 100%)" }}
+      />
 
-      {/* Center band */}
-      <div className="absolute inset-x-0 z-10 pointer-events-none border-y border-red-neon/30 bg-red-neon/[0.06]"
-        style={{ top: ITEM_H * 2, height: ITEM_H }} />
+      {/* Center selection band */}
+      <div
+        className="absolute inset-x-0 z-10 pointer-events-none border-y border-red-neon/30 bg-red-neon/[0.06]"
+        style={{ top: ITEM_H * 2, height: ITEM_H }}
+      />
 
-      {/* Drum */}
-      <motion.div
-        drag="y"
-        dragConstraints={{ top: indexToY(extSlots.length - 1), bottom: indexToY(0) }}
-        dragElastic={0}
-        style={{ y, transformStyle: "preserve-3d" }}
-        onDragStart={() => { dragging.current = true; }}
-        onDragEnd={() => { dragging.current = false; snap(y.get()); }}
-        className="cursor-grab active:cursor-grabbing"
+      {/* Scrollable drum */}
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+
+        style={{
+          height: ITEM_H * VISIBLE,
+          overflowY: "scroll",
+          scrollSnapType: "y mandatory",
+          WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+        }}
+        className="[&::-webkit-scrollbar]:hidden cursor-grab"
       >
-        {extSlots.map((slot, i) => (
-          <DrumItem
-            key={`${i}-${slot}`}
-            label={slot}
-            index={i}
-            y={y}
-            isSelected={i === toCenterExt(slots.indexOf(value))}
-            isBooked={getStatus(slot) === "booked"}
-          />
-        ))}
-      </motion.div>
+        <div style={{ height: ITEM_H * 2, flexShrink: 0 }} />
+
+        {extSlots.map((slot, i) => {
+          const natural  = i % N;
+          const copyIdx  = Math.floor(i / N);
+          const isCenter = copyIdx === MID && slots[natural] === value;
+          const booked   = getStatus(slot) === "booked";
+
+          return (
+            <div
+              key={`${i}-${slot}`}
+              ref={(el) => { itemsRef.current[i] = el; }}
+              style={{ height: ITEM_H, scrollSnapAlign: "center", flexShrink: 0 }}
+              className="flex items-center justify-center gap-2 will-change-transform"
+            >
+              {booked && <span className="w-1.5 h-1.5 rounded-full bg-red-neon shrink-0" />}
+              <span className={[
+                "font-cinzel tracking-widest select-none leading-none",
+                isCenter
+                  ? "text-white font-bold text-[1.1rem]"
+                  : booked
+                  ? "text-white/25 text-[0.8rem]"
+                  : "text-white/65 text-[0.8rem]",
+              ].join(" ")}>
+                {slot}
+              </span>
+            </div>
+          );
+        })}
+
+        <div style={{ height: ITEM_H * 2, flexShrink: 0 }} />
+      </div>
     </div>
   );
 }
