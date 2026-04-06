@@ -29,7 +29,10 @@ export default function DrumTimePicker({ slots, value, onChange, getStatus }: Pr
     if (!containerRef.current) return;
     isTeleporting.current = true;
     containerRef.current.scrollTop = extIdx * ITEM_H;
+    // Update transforms immediately so there's no stale frame
+    applyTransforms();
     requestAnimationFrame(() => { isTeleporting.current = false; });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Nearest available slot (circular)
@@ -69,10 +72,9 @@ export default function DrumTimePicker({ slots, value, onChange, getStatus }: Pr
       const scale   = Math.max(0.70, 1.12 - absDist * 0.15);   // larger at center
       const opacity = Math.max(0.06, 1 - absDist * 0.30);
 
-      el.style.transform = `perspective(380px) rotateX(${rotateX}deg) scale(${scale})`;
-      el.style.opacity   = String(opacity);
-      // Transition only when not actively scrolling (snap phase)
-      el.style.transition = "transform 0.12s ease, opacity 0.12s ease";
+      el.style.transform  = `perspective(380px) rotateX(${rotateX}deg) scale(${scale})`;
+      el.style.opacity    = String(opacity);
+      el.style.transition = "none"; // 60fps RAF is smooth enough, transition causes flicker on teleport
     });
   }, []);
 
