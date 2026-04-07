@@ -40,17 +40,21 @@ export async function GET(req: NextRequest) {
     const auth = getAuth();
     const sheets = google.sheets({ version: "v4", auth });
 
+    // Read column P (_ключ) from Bookings: "location_date_time"
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: "BookedSlots!A:B",
+      range: "Bookings!P:P",
     });
 
     const rows = res.data.values ?? [];
     const slots: Record<string, "booked"> = {};
+    const prefix = `${location}_${date}_`;
 
     for (const row of rows) {
-      const [rowLocation, slotKey] = row;
-      if (rowLocation === location && slotKey?.startsWith(date)) {
+      const key = row[0] as string | undefined;
+      if (key?.startsWith(prefix)) {
+        // key = "yunusaliev_2026-04-07_11:00" → slotKey = "2026-04-07_11:00"
+        const slotKey = key.slice(location.length + 1);
         slots[slotKey] = "booked";
       }
     }

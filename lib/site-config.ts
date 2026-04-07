@@ -10,7 +10,7 @@ export const CONTACTS = {
   whatsappUrl: "https://wa.me/996709899998",
   instagram: "https://www.instagram.com/mafia_vip_kg",
   instagram_handle: "@mafia_vip_kg",
-  telegram_chat: "https://t.me/mafia_vip_players", // заглушка — уточнить у клиента
+  telegram_chat: "https://t.me/mafia_vip_kg",
   telegram_bot: process.env.TELEGRAM_BOT_TOKEN ?? "",
   telegram_chat_id: process.env.TELEGRAM_CHAT_ID ?? "",
 };

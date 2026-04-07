@@ -11,7 +11,7 @@ export default function FAQ() {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
 
   return (
-    <section id="faq" className="py-24 bg-bg-primary relative overflow-hidden snap-section">
+    <section id="faq" className="py-24 bg-bg-primary relative overflow-hidden">
       <SectionBg variant="red" />
       <div className="max-w-3xl mx-auto px-4 sm:px-6">
         <motion.div

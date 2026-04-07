@@ -51,9 +51,9 @@ export default function LonePlayer() {
                 href={CONTACTS.telegram_chat}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 bg-red-neon hover:bg-red-mid text-white font-bold px-6 py-3 rounded-lg transition-colors duration-200 uppercase tracking-wider text-sm"
+                className="inline-flex items-center gap-2 bg-red-neon hover:bg-red-mid text-white font-bold px-6 py-3 rounded-lg transition-colors duration-200 uppercase tracking-wider text-sm whitespace-nowrap"
               >
-                {l.cta} →
+                {l.cta} <span aria-hidden="true">→</span>
               </a>
             </div>
           </div>

@@ -24,8 +24,6 @@
 
 html {
   scroll-behavior: smooth;
-  scroll-snap-type: y proximity;
-  scroll-padding-top: 30vh;
 }
 
 body {
@@ -127,11 +125,6 @@ body {
     text-wrap: balance;
   }
 
-  /* Snap anchor for page sections */
-  .snap-section {
-    scroll-snap-align: start;
-    scroll-snap-stop: normal;
-  }
 }
 
 /* ── Animated section background orbs ─────────────────────────────────────── */

@@ -11,7 +11,7 @@ export default function About() {
   const { t } = useLang();
 
   return (
-    <section id="about" className="py-24 bg-bg-primary relative overflow-hidden snap-section">
+    <section id="about" className="py-24 bg-bg-primary relative overflow-hidden">
       <SectionBg variant="redgold" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         {/* Header */}

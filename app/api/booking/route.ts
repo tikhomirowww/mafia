@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
-import { Readable } from "stream";
+
+// Increase body size limit for base64 receipt images (up to 10MB)
+export const config = {
+  api: { bodyParser: { sizeLimit: "10mb" } },
+};
 
 const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
@@ -16,7 +20,112 @@ function getAuth() {
   });
 }
 
-async function sendTelegramNotification(text: string) {
+const BOOKINGS_HEADERS = [
+  "Дата создания", "Формат", "Зал", "Дата", "Время",       // A–E
+  "Имя", "Телефон", "Игроков", "Комментарий", "Чек",       // F–J
+  "Оплата ✓", "Предоплата", "Скидка 50%",                  // K–M
+  "Полная сумма", "Остаток",                                // N–O
+  "_ключ",                                                   // P
+];
+
+/**
+ * Ensure both sheets exist and have headers.
+ * Returns the numeric sheetId of the Bookings sheet (needed for batchUpdate).
+ */
+async function ensureSheets(
+  sheets: ReturnType<typeof google.sheets>,
+  spreadsheetId: string
+): Promise<number> {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const sheetMeta = meta.data.sheets ?? [];
+  const existing = sheetMeta.map((s) => s.properties?.title ?? "");
+
+  const toCreate: string[] = [];
+  if (!existing.includes("Bookings")) toCreate.push("Bookings");
+
+  if (toCreate.length > 0) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: toCreate.map((title) => ({
+          addSheet: { properties: { title } },
+        })),
+      },
+    });
+  }
+
+  // Re-fetch only if we created new sheets
+  const freshMeta = toCreate.length > 0
+    ? (await sheets.spreadsheets.get({ spreadsheetId })).data.sheets ?? []
+    : sheetMeta;
+
+  const bookingsSheetId =
+    freshMeta.find((s) => s.properties?.title === "Bookings")
+      ?.properties?.sheetId ?? 0;
+
+  // Add headers only when first row is empty
+  const addHeaderIfEmpty = async (sheet: string, headers: string[]): Promise<boolean> => {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheet}!A1:Z1`,
+    });
+    if (!res.data.values || res.data.values.length === 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheet}!A1`,
+        valueInputOption: "RAW",
+        requestBody: { values: [headers] },
+      });
+      return true;
+    }
+    return false;
+  };
+
+  const wasEmpty = await addHeaderIfEmpty("Bookings", BOOKINGS_HEADERS);
+
+  // Style header row only when freshly created
+  if (wasEmpty) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [{
+          repeatCell: {
+            range: {
+              sheetId: bookingsSheetId,
+              startRowIndex: 0,
+              endRowIndex: 1,
+            },
+            cell: {
+              userEnteredFormat: {
+                backgroundColor: { red: 0.13, green: 0.13, blue: 0.13 },
+                textFormat: {
+                  bold: true,
+                  foregroundColor: { red: 1, green: 1, blue: 1 },
+                  fontSize: 10,
+                },
+                horizontalAlignment: "CENTER",
+                verticalAlignment: "MIDDLE",
+              },
+            },
+            fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)",
+          },
+        }, {
+          // Freeze header row
+          updateSheetProperties: {
+            properties: { sheetId: bookingsSheetId, gridProperties: { frozenRowCount: 1 } },
+            fields: "gridProperties.frozenRowCount",
+          },
+        }],
+      },
+    });
+  }
+
+  return bookingsSheetId;
+}
+
+/** Apply checkbox (Boolean) data validation to a single cell in column L. */
+
+async function sendTelegramMessage(text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) return;
@@ -27,43 +136,38 @@ async function sendTelegramNotification(text: string) {
   });
 }
 
-/** Upload base64 image to Google Drive, return public view URL */
-async function uploadReceiptToDrive(
-  auth: InstanceType<typeof google.auth.JWT>,
-  base64: string,      // e.g. "data:image/png;base64,..."
-  filename: string
-): Promise<string> {
+/**
+ * Send receipt image to Telegram as a photo.
+ * Returns a link to the message (for storing in Sheets), or null on failure.
+ */
+async function sendReceiptToTelegram(base64: string, caption: string): Promise<string | null> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) return null;
+
   const [meta, data] = base64.split(",");
   const mimeMatch = meta.match(/:(.*?);/);
   const mimeType = mimeMatch ? mimeMatch[1] : "image/jpeg";
+  const ext = mimeType.split("/")[1] ?? "jpg";
   const buffer = Buffer.from(data, "base64");
 
-  const drive = google.drive({ version: "v3", auth });
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  form.append("caption", caption);
+  form.append("photo", new Blob([buffer], { type: mimeType }), `receipt.${ext}`);
 
-  const folderId = process.env.GOOGLE_DRIVE_RECEIPTS_FOLDER_ID; // optional
-
-  const res = await drive.files.create({
-    requestBody: {
-      name: filename,
-      mimeType,
-      ...(folderId ? { parents: [folderId] } : {}),
-    },
-    media: {
-      mimeType,
-      body: Readable.from(buffer),
-    },
-    fields: "id",
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+    method: "POST",
+    body: form,
   });
 
-  const fileId = res.data.id!;
+  const json = await res.json() as { ok: boolean; result?: { message_id: number } };
+  if (!json.ok || !json.result) return null;
 
-  // Make file readable by anyone with link
-  await drive.permissions.create({
-    fileId,
-    requestBody: { role: "reader", type: "anyone" },
-  });
-
-  return `https://drive.google.com/file/d/${fileId}/view`;
+  const messageId = json.result.message_id;
+  // Build deep link: for group/supergroup chats, chatId starts with -100
+  const numericId = chatId.replace(/^-100/, "");
+  return `https://t.me/c/${numericId}/${messageId}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -76,6 +180,10 @@ export async function POST(req: NextRequest) {
     }
     if (players < 8 || players > 14) {
       return NextResponse.json({ error: "Invalid player count" }, { status: 400 });
+    }
+    const KG_PREFIX_RE = /^\+996(20[0-9]|22[0-9]|30[0-9]|50[0-9]|55[0-9]|70[0-9]|77[0-9]|99[0-9])\d{6}$/;
+    if (!KG_PREFIX_RE.test(phone)) {
+      return NextResponse.json({ error: "Invalid phone number" }, { status: 400 });
     }
 
     // 2-hour advance check
@@ -95,72 +203,168 @@ export async function POST(req: NextRequest) {
     const auth = getAuth();
     const sheets = google.sheets({ version: "v4", auth });
 
+    const bookingsSheetId = await ensureSheets(sheets, spreadsheetId);
+
+    // Read columns G (Телефон), M (Скидка) and P (_ключ) in parallel
+    const [phonesRes, discountRes, slotsRes] = await Promise.all([
+      sheets.spreadsheets.values.get({ spreadsheetId, range: "Bookings!G:G" }),
+      sheets.spreadsheets.values.get({ spreadsheetId, range: "Bookings!M:M" }),
+      sheets.spreadsheets.values.get({ spreadsheetId, range: "Bookings!P:P" }),
+    ]);
+
     // Double-booking check
-    const slotsRes = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: "BookedSlots!A:C",
-    });
-    const slotsRows = slotsRes.data.values ?? [];
     const slotKey = `${date}_${time}`;
-    const alreadyBooked = slotsRows.some(
-      (row) => row[0] === location && row[1] === slotKey
+    const fullKey = `${location}_${slotKey}`;
+    const alreadyBooked = (slotsRes.data.values ?? []).some(
+      (row) => row[0] === fullKey
     );
     if (alreadyBooked) {
       return NextResponse.json({ error: "Slot already taken" }, { status: 409 });
     }
 
-    const createdAt = new Date().toISOString();
+    // Determine discount: count visits since the last discount for this phone.
+    // If that count + 1 reaches 6 — this visit gets a discount.
+    const phoneRaw = phone.startsWith("+") ? phone : `+${phone}`;
+    const phones = phonesRes.data.values ?? [];
+    const discounts = discountRes.data.values ?? [];
 
-    // Upload receipt to Drive if provided
-    let receiptUrl = "";
-    if (receipt && typeof receipt === "string" && receipt.startsWith("data:image")) {
-      try {
-        const filename = `receipt_${name}_${date}_${time}.jpg`.replace(/[^a-zA-Z0-9._-]/g, "_");
-        receiptUrl = await uploadReceiptToDrive(auth, receipt, filename);
-      } catch (e) {
-        console.error("Drive upload failed:", e);
-        // Non-fatal — continue booking
+    // Find indices of rows matching this phone (1-based rows → 0-based array index)
+    // Row 0 in array = header, skip it
+    let visitsSinceLastDiscount = 0;
+
+    for (let i = 1; i < phones.length; i++) {
+      if (phones[i]?.[0] === phoneRaw) {
+        const discountVal = discounts[i]?.[0];
+        if (discountVal === true || discountVal === "TRUE") {
+          visitsSinceLastDiscount = 0; // сброс счётчика от последней скидки
+        } else {
+          visitsSinceLastDiscount++;
+        }
       }
     }
 
+    // This new booking is the (visitsSinceLastDiscount + 1)-th visit since last discount
+    const isDiscountVisit = (visitsSinceLastDiscount + 1) === 6;
+
+    const hasReceipt = receipt && typeof receipt === "string" && receipt.startsWith("data:image");
+
+    const FORMAT_LABELS: Record<string, string> = {
+      adult:       "Взрослая Мафия",
+      kids:        "Детская Мафия",
+      corporate:   "Корпоратив",
+      certificate: "Подарочный сертификат",
+    };
+    const LOCATION_LABELS: Record<string, string> = {
+      yunusaliev: "ул. Юнусалиева 129",
+      shabdan:    "пр. Шабдан Баатыра 4а",
+    };
+
+    const formatRu = FORMAT_LABELS[format] ?? format ?? "";
+    const locationRu = LOCATION_LABELS[location] ?? location;
+    // Wrap in formula so Google Sheets doesn't strip the leading "+"
+    const phoneDisplay = `="${phoneRaw}"`;
+
+    const toRuDate = (d: Date) =>
+      d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Bishkek" });
+    const toRuDateTime = (d: Date) =>
+      d.toLocaleString("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bishkek" });
+
+    const nowDate = new Date();
+    const gameDateDisplay = toRuDate(new Date(`${date}T12:00:00`));
+    const createdAtDisplay = toRuDateTime(nowDate);
+
+
+    // Send receipt to Telegram first — we need the message link for Sheets
+    let receiptTgLink: string | null = null;
+    if (hasReceipt) {
+      receiptTgLink = await sendReceiptToTelegram(
+        receipt,
+        `Чек от ${name} — ${gameDateDisplay} ${time} (${locationRu})`
+      ).catch((e) => { console.error("Receipt Telegram send failed:", e); return null; });
+    }
+
+    const receiptCell = receiptTgLink
+      ? `=HYPERLINK("${receiptTgLink}";"Открыть в Telegram")`
+      : hasReceipt ? "Чек (ссылка недоступна)" : "Нет";
+
     // Write to Bookings sheet
-    await sheets.spreadsheets.values.append({
+    const appendRes = await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: "Bookings!A:J",
+      range: "Bookings!A:P",
       valueInputOption: "USER_ENTERED",
       requestBody: {
         values: [[
-          createdAt, format ?? "", location, date, time,
-          name, phone, players, comment ?? "", receiptUrl,
+          createdAtDisplay, formatRu, locationRu, gameDateDisplay, time,
+          name, phoneDisplay, players, comment ?? "",
+          receiptCell,
+          false,             // K: Оплата ✓ (checkbox)
+          1000,              // L: Предоплата (всегда 1000)
+          isDiscountVisit,   // M: Скидка 50% (bool, кликабельный чекбокс)
+          0,                 // N: Полная сумма (overwritten by formula)
+          0,                 // O: Остаток (overwritten by formula)
+          `${location}_${slotKey}`, // P: _ключ
         ]],
       },
     });
 
-    // Write to BookedSlots sheet
-    await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: "BookedSlots!A:C",
-      valueInputOption: "USER_ENTERED",
-      requestBody: { values: [[location, slotKey, createdAt]] },
-    });
+    // Apply formulas + checkbox validation to the row we just wrote
+    const updatedRange = appendRes.data.updates?.updatedRange ?? "";
+    const rowMatch = updatedRange.match(/(\d+)$/);
+    if (rowMatch) {
+      const row = parseInt(rowMatch[1]); // 1-based sheet row
+      const rowIndex = row - 1;          // 0-based for batchUpdate
 
-    // Telegram notification
-    const locationName =
-      location === "yunusaliev" ? "ул. Юнусалиева 129" : "пр. Шабдан Баатыра 4а";
-    const receiptLine = receiptUrl ? `\n🧾 <b>Чек:</b> <a href="${receiptUrl}">открыть</a>` : "";
+      // Write formulas for N (Полная сумма) and O (Остаток)
+      // M (Скидка) — кликабельный чекбокс, N и O пересчитываются при его изменении
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `Bookings!N${row}:O${row}`,
+        valueInputOption: "USER_ENTERED",
+        requestBody: {
+          values: [[
+            // N: Полная сумма — игроки × 400, со скидкой ÷ 2 (только Взрослая Мафия)
+            `=IF(B${row}="Взрослая Мафия";IF(M${row};H${row}*400/2;H${row}*400);"")`,
+            // O: Остаток — Полная сумма минус предоплата
+            `=IF(ISNUMBER(N${row});N${row}-L${row};"")`,
+          ]],
+        },
+      }).catch((e) => console.error("Formula write failed:", e));
 
-    await sendTelegramNotification(
+      // Checkbox validation on K (Оплата ✓) and M (Скидка 50%)
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              setDataValidation: {
+                range: { sheetId: bookingsSheetId, startRowIndex: rowIndex, endRowIndex: row, startColumnIndex: 10, endColumnIndex: 11 },
+                rule: { condition: { type: "BOOLEAN" }, strict: true, showCustomUi: true },
+              },
+            },
+            {
+              setDataValidation: {
+                range: { sheetId: bookingsSheetId, startRowIndex: rowIndex, endRowIndex: row, startColumnIndex: 12, endColumnIndex: 13 },
+                rule: { condition: { type: "BOOLEAN" }, strict: true, showCustomUi: true },
+              },
+            },
+          ],
+        },
+      }).catch((e) => console.error("Checkbox validation failed:", e));
+    }
+
+    // Telegram: main notification
+    await sendTelegramMessage(
       `🎴 <b>Новая бронь — Mafia VIP</b>\n\n` +
-      `📍 <b>Зал:</b> ${locationName}\n` +
-      `📅 <b>Дата:</b> ${date}\n` +
+      `📍 <b>Зал:</b> ${locationRu}\n` +
+      `📅 <b>Дата:</b> ${gameDateDisplay}\n` +
       `⏰ <b>Время:</b> ${time}\n` +
-      `🎭 <b>Формат:</b> ${format || "—"}\n` +
+      `🎭 <b>Формат:</b> ${formatRu || "—"}\n` +
       `👤 <b>Имя:</b> ${name}\n` +
-      `📱 <b>Телефон:</b> ${phone}\n` +
+      `📱 <b>Телефон:</b> ${phoneRaw}\n` +
       `👥 <b>Игроков:</b> ${players}\n` +
       `💬 <b>Комментарий:</b> ${comment || "—"}` +
-      receiptLine +
-      `\n\n🕐 <i>${createdAt}</i>`
+      (receiptTgLink ? `\n🧾 <b>Чек:</b> <a href="${receiptTgLink}">открыть</a>` : hasReceipt ? "\n🧾 <b>Чек:</b> (ссылка недоступна)" : "") +
+      `\n\n🕐 <i>${createdAtDisplay}</i>`
     );
 
     return NextResponse.json({ success: true });

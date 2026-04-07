@@ -5,11 +5,12 @@ import QRCode from "react-qr-code";
 import { Upload, X, CheckCircle2, ImageIcon } from "lucide-react";
 
 interface Props {
-  amount: number;          // сом
+  amount: number;
   onFileChange: (file: File | null) => void;
+  error?: string;
 }
 
-export default function PaymentStep({ amount, onFileChange }: Props) {
+export default function PaymentStep({ amount, onFileChange, error }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -71,6 +72,9 @@ export default function PaymentStep({ amount, onFileChange }: Props) {
         <label className="block text-xs text-text-muted uppercase tracking-wider mb-2 font-medium">
           Чек об оплате <span className="text-red-neon">*</span>
         </label>
+        {error && (
+          <p className="text-red-neon text-xs mb-2">{error}</p>
+        )}
 
         {preview ? (
           /* Preview */

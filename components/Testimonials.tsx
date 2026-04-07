@@ -9,7 +9,7 @@ export default function Testimonials() {
   const { t } = useLang();
 
   return (
-    <section id="reviews" className="py-24 bg-bg-primary relative overflow-hidden snap-section">
+    <section id="reviews" className="py-24 bg-bg-primary relative overflow-hidden">
       <SectionBg variant="subtle" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <motion.div

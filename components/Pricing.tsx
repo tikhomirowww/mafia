@@ -10,7 +10,7 @@ export default function Pricing() {
   const p = t.pricing;
 
   return (
-    <section id="pricing" className="py-24 bg-bg-primary relative overflow-hidden snap-section">
+    <section id="pricing" className="py-24 bg-bg-primary relative overflow-hidden">
       <SectionBg variant="gold" />
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
         <motion.div

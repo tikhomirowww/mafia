@@ -1,12 +1,12 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Check, Theater, Baby, Building2, Gift, ArrowRight } from "lucide-react";
+import { Check, Swords, Baby, Building2, Gift, ArrowRight } from "lucide-react";
 import { useLang } from "@/context/LangContext";
 import { useBooking, type FormatId } from "@/context/BookingContext";
 import SectionBg from "@/components/ui/section-bg";
 
-const SERVICE_ICONS = [Theater, Baby, Building2, Gift];
+const SERVICE_ICONS = [Swords, Baby, Building2, Gift];
 const FORMAT_IDS: FormatId[] = ["adult", "kids", "corporate", "certificate"];
 
 export default function Services() {
@@ -21,7 +21,7 @@ export default function Services() {
   const btnLabel = lang === "ru" ? "Забронировать" : "Брондоо";
 
   return (
-    <section id="services" className="py-24 relative bg-bg-primary snap-section">
+    <section id="services" className="py-24 relative bg-bg-primary">
       <SectionBg variant="gold" />
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6">

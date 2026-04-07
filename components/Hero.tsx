@@ -40,7 +40,7 @@ export default function Hero() {
 
   return (
     <section
-      className="relative min-h-dvh flex flex-col justify-center items-center overflow-hidden snap-section"
+      className="relative min-h-dvh flex flex-col justify-center items-center overflow-hidden"
       aria-label="Главная секция"
     >
       {/* Particle canvas */}

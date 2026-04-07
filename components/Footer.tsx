@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MessageCircle } from "lucide-react";
+import WhatsAppIcon from "@/components/ui/whatsapp-icon";
 import { useLang } from "@/context/LangContext";
 import { CONTACTS } from "@/lib/site-config";
 
@@ -41,7 +41,7 @@ export default function Footer() {
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-2 border border-white/15 hover:border-red-neon/40 text-white hover:text-red-neon px-8 py-3.5 rounded-lg transition-colors duration-200 text-sm uppercase tracking-wider"
             >
-              <MessageCircle size={16} aria-hidden="true" />
+              <WhatsAppIcon size={16} />
               WhatsApp
             </a>
           </div>
@@ -102,7 +102,7 @@ export default function Footer() {
               className="w-10 h-10 rounded-lg border border-white/10 hover:border-red-neon/50 flex items-center justify-center text-text-muted hover:text-red-neon transition-all duration-200"
               aria-label="WhatsApp Mafia VIP"
             >
-              <MessageCircle size={18} />
+              <WhatsAppIcon size={18} />
             </a>
           </div>
         </div>

@@ -1,7 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MapPin, Clock, MessageCircle } from "lucide-react";
+import { MapPin, Clock } from "lucide-react";
+import WhatsAppIcon from "@/components/ui/whatsapp-icon";
 import { useLang } from "@/context/LangContext";
 import { CONTACTS, LOCATIONS } from "@/lib/site-config";
 import SectionBg from "@/components/ui/section-bg";
@@ -11,7 +12,7 @@ export default function Contacts() {
   const c = t.contacts;
 
   return (
-    <section id="contacts" className="py-24 bg-bg-primary relative overflow-hidden snap-section">
+    <section id="contacts" className="py-24 bg-bg-primary relative overflow-hidden">
       <SectionBg variant="gold" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <motion.div
@@ -91,11 +92,9 @@ export default function Contacts() {
               rel="noopener noreferrer"
               className="flex items-center gap-3 py-4 border-b border-white/5 hover:text-red-neon transition-colors duration-200 group"
             >
-              <MessageCircle
-                size={18}
-                className="text-red-neon group-hover:scale-110 transition-transform duration-200"
-                aria-hidden="true"
-              />
+              <span className="group-hover:scale-110 transition-transform duration-200 inline-flex">
+                <WhatsAppIcon size={18} />
+              </span>
               <div>
                 <p className="text-white text-sm font-medium">{c.whatsapp}</p>
                 <p className="text-text-muted text-xs">+996 709 899 998</p>

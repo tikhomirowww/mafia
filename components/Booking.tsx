@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { CheckCircle, AlertCircle, Loader2, PlusCircle } from "lucide-react";
 import { useLang } from "@/context/LangContext";
 import { useBooking } from "@/context/BookingContext";
 import { LOCATIONS, CONTACTS } from "@/lib/site-config";
@@ -16,13 +16,17 @@ import DrumTimePicker from "@/components/ui/drum-time-picker";
 import PhoneInput from "@/components/ui/phone-input";
 import PaymentStep from "@/components/ui/payment-step";
 
+// Valid KG mobile prefixes (3 digits after +996):
+// Beeline: 700-709, 770-779 | MegaCom: 500-509, 550-559 | O!: 200-209, 220-229, 990-999 | Saima: 300-309
+const KG_PREFIX_RE = /^\+996(20[0-9]|22[0-9]|30[0-9]|50[0-9]|55[0-9]|70[0-9]|77[0-9]|99[0-9])\d{6}$/;
+
 const schema = z.object({
   format: z.string().min(1),
   location: z.string().min(1),
   date: z.string().min(1),
   time: z.string().min(1),
   name: z.string().min(2),
-  phone: z.string().min(12), // "+996" + min 8 digits
+  phone: z.string().min(13).regex(KG_PREFIX_RE),
   players: z.number().min(8).max(14),
   comment: z.string().optional(),
 });
@@ -72,6 +76,7 @@ export default function Booking() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [serverError, setServerError] = useState("");
+  const [receiptError, setReceiptError] = useState("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
   const {
@@ -80,11 +85,20 @@ export default function Booking() {
     watch,
     setValue,
     control,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { players: 8 },
   });
+
+  const handleNewBooking = useCallback(() => {
+    reset({ players: 8 });
+    setReceiptFile(null);
+    setServerError("");
+    setReceiptError("");
+    setSubmitted(false);
+  }, [reset]);
 
   const selectedDate = watch("date");
   const selectedLocation = watch("location");
@@ -112,6 +126,7 @@ export default function Booking() {
 
   const onSubmit = async (data: FormData) => {
     setServerError("");
+    setReceiptError("");
     if (isSlotPast(data.date, data.time)) {
       setServerError(b.errors.tooSoon);
       return;
@@ -119,6 +134,10 @@ export default function Booking() {
     const slotKey = `${data.date}_${data.time}`;
     if (bookedSlots[slotKey] === "booked") {
       setServerError(b.errors.slotTaken);
+      return;
+    }
+    if (!receiptFile) {
+      setReceiptError(b.errors.receiptRequired);
       return;
     }
 
@@ -140,6 +159,7 @@ export default function Booking() {
       });
       if (!res.ok) throw new Error();
       setSubmitted(true);
+      document.getElementById("booking")?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch {
       setServerError(b.errors.generic);
     }
@@ -180,7 +200,7 @@ export default function Booking() {
   const formatOptions = FORMAT_OPTIONS[lang];
 
   return (
-    <section id="booking" className="py-24 relative bg-bg-primary overflow-hidden snap-section">
+    <section id="booking" className="py-24 relative bg-bg-primary overflow-hidden">
       <SectionBg variant="red" />
 
       <div className="relative max-w-5xl mx-auto px-4 sm:px-6">
@@ -225,14 +245,14 @@ export default function Booking() {
                   <p className="text-text-muted text-sm max-w-sm leading-relaxed">
                     {b.success.description}
                   </p>
-                  <a
-                    href={CONTACTS.whatsappUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 inline-flex items-center gap-2 bg-red-neon hover:bg-red-mid text-white font-semibold px-6 py-3 rounded transition-colors duration-200 uppercase tracking-wider text-sm"
+                  <button
+                    type="button"
+                    onClick={handleNewBooking}
+                    className="mt-2 inline-flex items-center gap-2 bg-red-neon hover:bg-red-mid text-white font-semibold px-6 py-3 rounded-lg transition-colors duration-200 uppercase tracking-wider text-sm"
                   >
-                    {b.success.whatsapp}
-                  </a>
+                    <PlusCircle size={16} />
+                    {b.success.newBooking}
+                  </button>
                 </motion.div>
               ) : (
                 <motion.form
@@ -263,48 +283,52 @@ export default function Booking() {
                     )}
                   </div>
 
-                  {/* Location */}
-                  <div>
-                    <label className="block text-xs text-text-muted uppercase tracking-wider mb-2 font-medium">
-                      {b.form.location} <span className="text-red-neon">*</span>
-                    </label>
-                    <Controller
-                      name="location"
-                      control={control}
-                      render={({ field }) => (
-                        <CustomSelect
-                          options={locationOptions}
-                          value={field.value ?? ""}
-                          onChange={field.onChange}
-                          placeholder={b.form.locationPlaceholder}
-                        />
+                  {/* Location — shown after format selected */}
+                  {selectedFormatField && (
+                    <div>
+                      <label className="block text-xs text-text-muted uppercase tracking-wider mb-2 font-medium">
+                        {b.form.location} <span className="text-red-neon">*</span>
+                      </label>
+                      <Controller
+                        name="location"
+                        control={control}
+                        render={({ field }) => (
+                          <CustomSelect
+                            options={locationOptions}
+                            value={field.value ?? ""}
+                            onChange={field.onChange}
+                            placeholder={b.form.locationPlaceholder}
+                          />
+                        )}
+                      />
+                      {errors.location && (
+                        <p className="text-red-neon text-xs mt-1">{b.errors.required}</p>
                       )}
-                    />
-                    {errors.location && (
-                      <p className="text-red-neon text-xs mt-1">{b.errors.required}</p>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
-                  {/* Date */}
-                  <div>
-                    <label className="block text-xs text-text-muted uppercase tracking-wider mb-2 font-medium">
-                      {b.form.date} <span className="text-red-neon">*</span>
-                    </label>
-                    <Controller
-                      name="date"
-                      control={control}
-                      render={({ field }) => (
-                        <CustomDatePicker
-                          value={field.value ?? ""}
-                          onChange={field.onChange}
-                          placeholder="Выберите дату"
-                        />
+                  {/* Date — shown after location selected */}
+                  {selectedLocation && (
+                    <div>
+                      <label className="block text-xs text-text-muted uppercase tracking-wider mb-2 font-medium">
+                        {b.form.date} <span className="text-red-neon">*</span>
+                      </label>
+                      <Controller
+                        name="date"
+                        control={control}
+                        render={({ field }) => (
+                          <CustomDatePicker
+                            value={field.value ?? ""}
+                            onChange={field.onChange}
+                            placeholder="Выберите дату"
+                          />
+                        )}
+                      />
+                      {errors.date && (
+                        <p className="text-red-neon text-xs mt-1">{b.errors.required}</p>
                       )}
-                    />
-                    {errors.date && (
-                      <p className="text-red-neon text-xs mt-1">{b.errors.required}</p>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* Time slots — drum picker */}
                   {selectedDate && (
@@ -317,13 +341,25 @@ export default function Booking() {
                           <Loader2 size={14} className="animate-spin" />
                           <span>Загрузка слотов...</span>
                         </div>
+                      ) : drumSlots.length === 0 ? (
+                        <div className="rounded-xl bg-bg-elevated border border-white/8 px-5 py-6 text-center">
+                          <p className="text-text-muted text-sm">
+                            На сегодня доступных слотов нет.
+                          </p>
+                          <p className="text-text-dim text-xs mt-1">
+                            Выберите другую дату или напишите нам в{" "}
+                            <a href={CONTACTS.whatsappUrl} target="_blank" rel="noopener noreferrer" className="text-red-neon hover:underline">
+                              WhatsApp
+                            </a>
+                          </p>
+                        </div>
                       ) : (
-                          <DrumTimePicker
-                            slots={drumSlots}
-                            value={selectedTime ?? ""}
-                            onChange={(v) => setValue("time", v, { shouldValidate: true })}
-                            getStatus={getDrumStatus}
-                          />
+                        <DrumTimePicker
+                          slots={drumSlots}
+                          value={selectedTime ?? ""}
+                          onChange={(v) => setValue("time", v, { shouldValidate: true })}
+                          getStatus={getDrumStatus}
+                        />
                       )}
                       {errors.time && (
                         <p className="text-red-neon text-xs mt-1">{b.errors.required}</p>
@@ -381,13 +417,9 @@ export default function Booking() {
                         >
                           −
                         </button>
-                        <input
-                          type="number"
-                          {...register("players", { valueAsNumber: true })}
-                          min={8}
-                          max={14}
-                          className="w-16 bg-bg-elevated border border-white/10 focus:border-red-neon text-white text-center rounded-lg px-3 py-2.5 text-sm outline-none shrink-0"
-                        />
+                        <div className="w-16 bg-bg-elevated border border-white/10 text-white text-center rounded-lg px-3 py-2.5 text-sm shrink-0 select-none font-medium tabular-nums">
+                          {selectedPlayers}
+                        </div>
                         <button
                           type="button"
                           onClick={() => {
@@ -449,10 +481,11 @@ export default function Booking() {
                   )}
 
                   {/* Payment */}
-                  {selectedFormatField === "adult" && (
+                  {selectedFormatField && (
                     <PaymentStep
-                      amount={selectedPlayers * 400}
-                      onFileChange={setReceiptFile}
+                      amount={1000}
+                      onFileChange={(f) => { setReceiptFile(f); if (f) setReceiptError(""); }}
+                      error={receiptError}
                     />
                   )}
 
