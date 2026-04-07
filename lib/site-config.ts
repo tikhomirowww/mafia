@@ -1,4 +1,4 @@
-export const SITE_URL = "https://mafia-swart-kappa.vercel.app";
+export const SITE_URL = "https://mafia-lyart.vercel.app";
 export const SITE_TITLE = "Mafia VIP — Игра с падающими стульями в Бишкеке";
 export const SITE_DESCRIPTION =
   "Единственная в Кыргызстане VIP-студия для игры в Мафию с падающими стульями. 8–14 игроков, 2 зала в Бишкеке, работаем 24/7. Цена: 400 сом/час с человека.";
