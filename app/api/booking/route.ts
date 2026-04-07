@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 
-// Increase body size limit for base64 receipt images (up to 10MB)
-export const config = {
-  api: { bodyParser: { sizeLimit: "10mb" } },
-};
 
 const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
