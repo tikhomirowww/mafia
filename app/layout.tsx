@@ -19,14 +19,6 @@ export const metadata: Metadata = {
     siteName: "Mafia VIP",
     locale: "ru_KG",
     type: "website",
-    images: [
-      {
-        url: "/og-image.jpg",
-        width: 1200,
-        height: 630,
-        alt: "Mafia VIP — VIP-студия для игры в Мафию в Бишкеке",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
@@ -65,7 +57,7 @@ const jsonLd = {
       ],
       openingHours: "Mo-Su 00:00-24:00",
       priceRange: "400 KGS/hour",
-      image: `${SITE_URL}/og-image.jpg`,
+      image: `${SITE_URL}/opengraph-image`,
       sameAs: [
         "https://www.instagram.com/mafia_vip_kg",
         "https://wa.me/996709899998",

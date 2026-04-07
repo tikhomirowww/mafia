@@ -86,6 +86,7 @@ export default function DrumTimePicker({ slots, value, onChange, getStatus }: Pr
     rafId.current = requestAnimationFrame(applyTransforms);
 
     if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    // 250ms — enough for the browser to finish any inertia scroll before we read scrollTop
     scrollTimer.current = setTimeout(() => {
       if (!containerRef.current || isTeleporting.current) return;
       const raw     = Math.round(containerRef.current.scrollTop / ITEM_H);
@@ -93,7 +94,7 @@ export default function DrumTimePicker({ slots, value, onChange, getStatus }: Pr
       const target  = nearestAvailable(natural);
       jumpTo(MID * N + target);
       onChange(slots[target]);
-    }, 130);
+    }, 250);
   }, [N, slots, nearestAvailable, onChange, jumpTo, applyTransforms]);
 
   // Mouse drag (skip touch — handled by native scroll)
@@ -135,18 +136,23 @@ export default function DrumTimePicker({ slots, value, onChange, getStatus }: Pr
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // On mount: position to center copy
+  // On mount: position to current value (or first available) and auto-select
   useEffect(() => {
-    const natural = Math.max(0, slots.indexOf(value));
-    jumpTo(MID * N + natural);
+    const idx = value ? Math.max(0, slots.indexOf(value)) : 0;
+    const target = nearestAvailable(idx);
+    jumpTo(MID * N + target);
     requestAnimationFrame(applyTransforms);
+    // Auto-select so the form field is populated immediately
+    if (!value) onChange(slots[target]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When slot list changes (date changed): reset to first slot
+  // When slot list changes (date changed): reset to first available slot
   useEffect(() => {
-    jumpTo(MID * N);
+    const target = nearestAvailable(0);
+    jumpTo(MID * N + target);
     requestAnimationFrame(applyTransforms);
+    onChange(slots[target]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slots]);
 
@@ -176,7 +182,6 @@ export default function DrumTimePicker({ slots, value, onChange, getStatus }: Pr
         style={{
           height: ITEM_H * VISIBLE,
           overflowY: "scroll",
-          scrollSnapType: "y mandatory",
           WebkitOverflowScrolling: "touch",
           scrollbarWidth: "none",
           msOverflowStyle: "none",
@@ -195,7 +200,7 @@ export default function DrumTimePicker({ slots, value, onChange, getStatus }: Pr
             <div
               key={`${i}-${slot}`}
               ref={(el) => { itemsRef.current[i] = el; }}
-              style={{ height: ITEM_H, scrollSnapAlign: "center", flexShrink: 0 }}
+              style={{ height: ITEM_H, flexShrink: 0 }}
               className="flex items-center justify-center gap-2 will-change-transform"
             >
               {booked && <span className="w-1.5 h-1.5 rounded-full bg-red-neon shrink-0" />}

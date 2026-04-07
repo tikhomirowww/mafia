@@ -162,7 +162,7 @@ export const translations = {
     },
     booking: {
       title: "Забронировать игру",
-      subtitle: "Выберите удобное время — подтвердим в течение 15 минут",
+      subtitle: "Выберите удобное время — бронирование автоматическое",
       form: {
         location: "Выберите локацию",
         locationPlaceholder: "Выберите зал",
@@ -498,7 +498,7 @@ export const translations = {
     },
     booking: {
       title: "Оюнду брондоо",
-      subtitle: "Ыңгайлуу убакытты тандаңыз — 15 мүнөт ичинде ырасталат",
+      subtitle: "Ыңгайлуу убакытты тандаңыз — брондоо автоматтык",
       form: {
         location: "Жайды тандаңыз",
         locationPlaceholder: "Залды тандаңыз",
